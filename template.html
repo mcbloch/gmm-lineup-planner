@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>GMM 2026 Lineup Planner</title>
+<style>
+  :root {
+    --green: #95c11f;
+    --green-dark: #6e9114;
+    --bg: #0c0d0a;
+    --surface: #16180f;
+    --surface-2: #1f2214;
+    --border: #2c3018;
+    --text: #f2f3ec;
+    --muted: #9aa085;
+    --must: #95c11f;
+    --want: #4caf50;
+    --good: #29b6c5;
+    --filler: #b0a04a;
+    --skip: #7a7f6e;
+    --nope: #c0452f;
+    --warn: #ffb300;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { background: var(--bg); }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 15px;
+    line-height: 1.4;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .wrap { max-width: 640px; margin: 0 auto; }
+
+  /* ---------- header ---------- */
+  header {
+    position: sticky; top: 0; z-index: 20;
+    background: linear-gradient(180deg, #11130b 0%, #0c0d0a 100%);
+    border-bottom: 2px solid var(--green);
+  }
+  .header-inner { padding: 10px 12px 8px; display: flex; align-items: center; gap: 10px; }
+  .logo {
+    font-weight: 900; font-size: 18px; letter-spacing: 1px;
+    text-transform: uppercase; font-stretch: condensed;
+  }
+  .logo em { color: var(--green); font-style: normal; }
+  .progress-label { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .progress-bar { height: 3px; background: var(--surface-2); }
+  .progress-bar > div { height: 100%; background: var(--green); width: 0%; transition: width .3s; }
+
+  /* ---------- day tabs ---------- */
+  .tabs { display: flex; }
+  .tabs button {
+    flex: 1; padding: 9px 0 8px; background: none; border: none;
+    border-bottom: 3px solid transparent;
+    color: var(--muted); font: inherit; font-weight: 700; font-size: 14px;
+    text-transform: uppercase; letter-spacing: .5px; cursor: pointer;
+  }
+  .tabs button.active { color: var(--green); border-bottom-color: var(--green); }
+
+  /* ---------- filter bar ---------- */
+  .filters {
+    display: flex; gap: 6px; overflow-x: auto; padding: 10px 12px;
+    scrollbar-width: none;
+  }
+  .filters::-webkit-scrollbar { display: none; }
+  .chip {
+    flex: 0 0 auto; padding: 5px 12px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--surface);
+    color: var(--muted); font: inherit; font-size: 13px; font-weight: 600;
+    cursor: pointer; white-space: nowrap;
+  }
+  .chip.active { background: var(--green); border-color: var(--green); color: #10120a; }
+  select.chip { appearance: none; padding-right: 22px;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6"><path d="M0 0l5 6 5-6z" fill="%239aa085"/></svg>');
+    background-repeat: no-repeat; background-position: right 8px center; }
+
+  /* ---------- act cards ---------- */
+  main { padding: 0 10px 40px; }
+  .count-line { color: var(--muted); font-size: 12px; padding: 2px 4px 8px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-left: 4px solid var(--border);
+    border-radius: 10px; margin-bottom: 10px; padding: 10px;
+  }
+  .card[data-rated="must"]   { border-left-color: var(--must); }
+  .card[data-rated="want"]   { border-left-color: var(--want); }
+  .card[data-rated="good"]   { border-left-color: var(--good); }
+  .card[data-rated="filler"] { border-left-color: var(--filler); }
+  .card[data-rated="skip"]   { border-left-color: var(--skip); opacity: .75; }
+  .card[data-rated="nope"]   { border-left-color: var(--nope); opacity: .6; }
+  .card-top { display: flex; gap: 10px; align-items: center; }
+  .thumb {
+    width: 54px; height: 54px; border-radius: 8px; object-fit: cover;
+    background: var(--surface-2); flex: 0 0 auto;
+  }
+  .thumb.placeholder { display: flex; align-items: center; justify-content: center;
+    color: var(--green); font-weight: 900; font-size: 20px; }
+  .act-info { min-width: 0; }
+  .act-name { font-weight: 800; font-size: 16px; }
+  .act-name a { color: inherit; text-decoration: none; }
+  .act-meta { color: var(--muted); font-size: 12.5px; margin-top: 1px; }
+  .act-meta .stage { color: var(--green); font-weight: 600; }
+  .listen { margin-left: auto; display: flex; gap: 7px; flex: 0 0 auto; }
+  .listen a {
+    width: 38px; height: 38px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border); background: var(--surface-2);
+  }
+  .listen svg { width: 19px; height: 19px; }
+  .listen .sp svg { fill: #1ed760; }
+  .listen .yt svg { fill: #ff0033; }
+  .listen a.search { opacity: .65; }  /* search fallback, no direct artist link */
+  .conflict {
+    margin-top: 6px; font-size: 12px; color: var(--warn);
+    background: rgba(255,179,0,.08); border: 1px solid rgba(255,179,0,.25);
+    border-radius: 6px; padding: 4px 8px;
+  }
+  .ratings { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; margin-top: 9px; }
+  .ratings button {
+    padding: 7px 0; min-height: 34px; border-radius: 7px;
+    border: 1px solid var(--border); background: var(--surface-2);
+    color: var(--muted); font: inherit; font-size: 11.5px; font-weight: 700;
+    cursor: pointer; text-transform: uppercase; letter-spacing: .2px;
+  }
+  .ratings button.sel { color: #10120a; }
+  .ratings button.sel[data-r="must"]   { background: var(--must);   border-color: var(--must); }
+  .ratings button.sel[data-r="want"]   { background: var(--want);   border-color: var(--want); }
+  .ratings button.sel[data-r="good"]   { background: var(--good);   border-color: var(--good); }
+  .ratings button.sel[data-r="filler"] { background: var(--filler); border-color: var(--filler); }
+  .ratings button.sel[data-r="skip"]   { background: var(--skip);   border-color: var(--skip); color: #fff; }
+  .ratings button.sel[data-r="nope"]   { background: var(--nope);   border-color: var(--nope); color: #fff; }
+  .empty { text-align: center; color: var(--muted); padding: 40px 0; }
+
+  /* ---------- footer / data tools ---------- */
+  .toolbar {
+    display: flex; gap: 8px; flex-wrap: wrap; padding: 14px 12px 28px;
+    border-top: 1px solid var(--border); margin-top: 18px;
+  }
+  .toolbar button, .toolbar label {
+    flex: 1 1 auto; min-width: 110px; padding: 10px; border-radius: 8px;
+    border: 1px solid var(--green-dark); background: var(--surface);
+    color: var(--green); font: inherit; font-size: 13px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .4px; cursor: pointer; text-align: center;
+  }
+  .toolbar .danger { border-color: #5b2a20; color: var(--nope); }
+  .toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+    background: var(--green); color: #10120a; font-weight: 700; font-size: 14px;
+    padding: 10px 18px; border-radius: 999px; opacity: 0; pointer-events: none;
+    transition: opacity .25s; z-index: 50; white-space: nowrap;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="header-inner">
+      <div class="logo">GMM <em>2026</em> Planner</div>
+      <div class="progress-label" id="progress-label"></div>
+    </div>
+    <div class="progress-bar"><div id="progress-fill"></div></div>
+    <nav class="tabs" id="day-tabs"></nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="filters" id="rating-filters"></div>
+  <main>
+    <div class="count-line" id="count-line"></div>
+    <div id="act-list"></div>
+    <div class="toolbar">
+      <button id="btn-export">Export</button>
+      <label for="import-file">Import</label>
+      <input type="file" id="import-file" accept=".json,application/json" hidden>
+      <button id="btn-clear" class="danger">Clear all</button>
+    </div>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script id="lineup-data" type="application/json">__LINEUP_JSON__</script>
+<script>
+"use strict";
+
+const LINEUP = JSON.parse(document.getElementById("lineup-data").textContent);
+const STORAGE_KEY = "gmm2026-ratings";
+
+const RATINGS = [
+  { key: "must",   label: "\u{1F918} Must" },
+  { key: "want",   label: "Want" },
+  { key: "good",   label: "Good" },
+  { key: "filler", label: "Filler" },
+  { key: "skip",   label: "Skip" },
+  { key: "nope",   label: "Nope" },
+];
+const RATING_KEYS = new Set(RATINGS.map(r => r.key));
+const DAY_SHORT = { Thursday: "Thu", Friday: "Fri", Saturday: "Sat", Sunday: "Sun" };
+
+// ---------- state ----------
+let ratings = loadRatings();
+let activeDay = LINEUP.days[0];
+let ratingFilter = "all";   // all | unrated | <rating key>
+let stageFilter = "all";
+
+function loadRatings() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+    return sanitizeRatings(raw.ratings || raw);
+  } catch { return {}; }
+}
+function sanitizeRatings(obj) {
+  const clean = {};
+  if (obj && typeof obj === "object") {
+    for (const [id, r] of Object.entries(obj)) {
+      if (RATING_KEYS.has(r) && LINEUP.acts.some(a => a.id === id)) clean[id] = r;
+    }
+  }
+  return clean;
+}
+function saveRatings() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, ratings }));
+}
+
+// ---------- time helpers (late-night sets count as 24h+) ----------
+function toMinutes(hhmm) {
+  const [h, m] = hhmm.split(":").map(Number);
+  return (h < 6 ? h + 24 : h) * 60 + m;
+}
+function overlaps(a, b) {
+  return a.day === b.day &&
+    toMinutes(a.start) < toMinutes(b.end) &&
+    toMinutes(b.start) < toMinutes(a.end);
+}
+// Conflicts among acts the user actually plans to see.
+function conflictsFor(act) {
+  const r = ratings[act.id];
+  if (r !== "must" && r !== "want") return [];
+  return LINEUP.acts.filter(o =>
+    o.id !== act.id &&
+    (ratings[o.id] === "must" || ratings[o.id] === "want") &&
+    overlaps(act, o));
+}
+
+// ---------- rendering ----------
+const tabsEl = document.getElementById("day-tabs");
+const filtersEl = document.getElementById("rating-filters");
+const listEl = document.getElementById("act-list");
+const countEl = document.getElementById("count-line");
+
+function renderTabs() {
+  tabsEl.innerHTML = "";
+  for (const day of LINEUP.days) {
+    const b = document.createElement("button");
+    b.textContent = DAY_SHORT[day] || day;
+    b.classList.toggle("active", day === activeDay);
+    b.onclick = () => { activeDay = day; render(); window.scrollTo({ top: 0 }); };
+    tabsEl.appendChild(b);
+  }
+}
+
+function renderFilters() {
+  filtersEl.innerHTML = "";
+  const dayActs = LINEUP.acts.filter(a => a.day === activeDay);
+  const unratedCount = dayActs.filter(a => !ratings[a.id]).length;
+  const chips = [
+    { key: "all", label: "All" },
+    { key: "unrated", label: `Unrated (${unratedCount})` },
+    ...RATINGS.map(r => ({ key: r.key, label: r.label })),
+  ];
+  for (const c of chips) {
+    const b = document.createElement("button");
+    b.className = "chip" + (ratingFilter === c.key ? " active" : "");
+    b.textContent = c.label;
+    b.onclick = () => { ratingFilter = c.key; render(); };
+    filtersEl.appendChild(b);
+  }
+  const sel = document.createElement("select");
+  sel.className = "chip" + (stageFilter !== "all" ? " active" : "");
+  sel.innerHTML = '<option value="all">All stages</option>' +
+    LINEUP.stages.map(s => `<option${s === stageFilter ? " selected" : ""}>${s}</option>`).join("");
+  sel.onchange = () => { stageFilter = sel.value; render(); };
+  filtersEl.appendChild(sel);
+}
+
+function visibleActs() {
+  return LINEUP.acts.filter(a => {
+    if (a.day !== activeDay) return false;
+    if (stageFilter !== "all" && a.stage !== stageFilter) return false;
+    if (ratingFilter === "unrated") return !ratings[a.id];
+    if (ratingFilter !== "all") return ratings[a.id] === ratingFilter;
+    return true;
+  });
+}
+
+function renderList() {
+  const acts = visibleActs();
+  countEl.textContent = `${acts.length} act${acts.length === 1 ? "" : "s"}`;
+  listEl.innerHTML = "";
+  if (!acts.length) {
+    listEl.innerHTML = '<div class="empty">Nothing here. \u{1F918}</div>';
+    return;
+  }
+  for (const act of acts) listEl.appendChild(renderCard(act));
+}
+
+function renderCard(act) {
+  const card = document.createElement("article");
+  card.className = "card";
+  if (ratings[act.id]) card.dataset.rated = ratings[act.id];
+
+  const top = document.createElement("div");
+  top.className = "card-top";
+  if (act.image) {
+    const img = document.createElement("img");
+    img.className = "thumb";
+    img.src = act.image;
+    img.alt = "";
+    img.loading = "lazy";
+    img.onerror = () => img.replaceWith(makePlaceholder(act));
+    top.appendChild(img);
+  } else {
+    top.appendChild(makePlaceholder(act));
+  }
+
+  const info = document.createElement("div");
+  info.className = "act-info";
+  const name = document.createElement("div");
+  name.className = "act-name";
+  if (act.url) {
+    const a = document.createElement("a");
+    a.href = act.url; a.target = "_blank"; a.rel = "noopener";
+    a.textContent = act.artist;
+    name.appendChild(a);
+  } else {
+    name.textContent = act.artist;
+  }
+  const meta = document.createElement("div");
+  meta.className = "act-meta";
+  meta.innerHTML = `${act.start}–${act.end} • <span class="stage"></span>`;
+  meta.querySelector(".stage").textContent = act.stage;
+  info.append(name, meta);
+  top.appendChild(info);
+  top.appendChild(renderListen(act));
+  card.appendChild(top);
+
+  const conflicts = conflictsFor(act);
+  if (conflicts.length) {
+    const c = document.createElement("div");
+    c.className = "conflict";
+    c.textContent = "⚠ Overlaps: " +
+      conflicts.map(o => `${o.artist} (${o.start})`).join(", ");
+    card.appendChild(c);
+  }
+
+  const row = document.createElement("div");
+  row.className = "ratings";
+  for (const r of RATINGS) {
+    const b = document.createElement("button");
+    b.dataset.r = r.key;
+    b.textContent = r.label;
+    if (ratings[act.id] === r.key) b.classList.add("sel");
+    b.onclick = () => {
+      if (ratings[act.id] === r.key) delete ratings[act.id]; // tap again to unset
+      else ratings[act.id] = r.key;
+      saveRatings();
+      render();
+    };
+    row.appendChild(b);
+  }
+  card.appendChild(row);
+  return card;
+}
+
+const ICONS = {
+  spotify: '<svg viewBox="0 0 24 24"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>',
+  youtube: '<svg viewBox="0 0 24 24"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>',
+};
+
+// Direct artist link when graspop.be lists one, search fallback otherwise —
+// every act stays listenable either way.
+function renderListen(act) {
+  const wrap = document.createElement("div");
+  wrap.className = "listen";
+  const q = encodeURIComponent(act.artist);
+  const targets = [
+    { cls: "sp", icon: "spotify", direct: act.spotify,
+      search: `https://open.spotify.com/search/${q}`, name: "Spotify" },
+    { cls: "yt", icon: "youtube", direct: act.youtube,
+      search: `https://www.youtube.com/results?search_query=${q}`, name: "YouTube" },
+  ];
+  for (const t of targets) {
+    const a = document.createElement("a");
+    a.className = t.cls + (t.direct ? "" : " search");
+    a.href = t.direct || t.search;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.title = (t.direct ? "Listen on " : "Search on ") + t.name;
+    a.innerHTML = ICONS[t.icon];
+    wrap.appendChild(a);
+  }
+  return wrap;
+}
+
+function makePlaceholder(act) {
+  const d = document.createElement("div");
+  d.className = "thumb placeholder";
+  d.textContent = act.artist[0].toUpperCase();
+  return d;
+}
+
+function renderProgress() {
+  const total = LINEUP.acts.length;
+  const rated = Object.keys(ratings).length;
+  document.getElementById("progress-label").textContent = `${rated}/${total} rated`;
+  document.getElementById("progress-fill").style.width = (100 * rated / total) + "%";
+}
+
+function render() {
+  renderTabs();
+  renderFilters();
+  renderList();
+  renderProgress();
+}
+
+// ---------- export / import / clear ----------
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+document.getElementById("btn-export").onclick = () => {
+  const payload = {
+    app: "gmm2026-lineup-planner",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    ratings,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "gmm2026-ratings.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast("Exported " + Object.keys(ratings).length + " ratings");
+};
+
+document.getElementById("import-file").onchange = (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      const imported = sanitizeRatings(data.ratings || data);
+      if (!Object.keys(imported).length) { toast("No valid ratings found"); return; }
+      ratings = imported;
+      saveRatings();
+      render();
+      toast("Imported " + Object.keys(imported).length + " ratings");
+    } catch {
+      toast("Could not read that file");
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = "";
+};
+
+document.getElementById("btn-clear").onclick = () => {
+  if (!confirm("Delete all your ratings?")) return;
+  ratings = {};
+  saveRatings();
+  render();
+  toast("Cleared");
+};
+
+render();
+</script>
+</body>
+</html>
